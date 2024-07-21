@@ -3,23 +3,29 @@ import sys
 
 
 def ctc_loss(y, p, alphabet):
-    # Create the extended label sequence z
-    z = ['' if i % 2 == 0 else p[i // 2] for i in range(2 * len(p) + 1)]
+    # Initialize z:
+    z = []
+    for i in range(2 * len(p) + 1):
+        if i % 2 == 0:
+            z.append("")
+        else:
+            z.append(p[i // 2])
 
     T, K = y.shape
     S = len(z)
 
-    # Initialize alpha
+    # Initialize alpha:
     alpha = np.zeros((S, T))
-    alpha[0, 0] = y[0, alphabet.index('')]  # blank
-    alpha[1, 0] = y[0, alphabet.index(z[1])]
+    alpha[0, 0] = y[0, 0]
+    alpha[1, 0] = y[0, alphabet.index(z[1])]  # Maybe z1 - > z0
+    alpha[2:, 0] = 0
 
-    # Dynamic programming
+    # Dynamic Programming:
     for t in range(1, T):
         for s in range(S):
             if s == 0:
-                alpha[s, t] = alpha[s, t - 1] * y[t, alphabet.index('')]
-            elif s == 1:
+                alpha[s, t] = alpha[s, t - 1] * y[t, 0]
+            elif s == 1: # z[s] != "" (epsilon)
                 alpha[s, t] = (alpha[s - 1, t - 1] + alpha[s, t - 1]) * y[t, alphabet.index(z[s])]
             else:
                 if z[s] == '' or z[s] == z[s - 2]:
@@ -28,8 +34,7 @@ def ctc_loss(y, p, alphabet):
                     alpha[s, t] = (alpha[s - 2, t - 1] + alpha[s - 1, t - 1] + alpha[s, t - 1]) * y[
                         t, alphabet.index(z[s])]
 
-    # Sum up the last two entries of the last column to get P(p|y)
-    return alpha[-1, -1] + alpha[-2, -1]
+    return alpha[-1, -1]
 
 
 def print_p(p: float):

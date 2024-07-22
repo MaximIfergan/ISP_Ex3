@@ -3,6 +3,8 @@ import sys
 
 
 def ctc_loss(y, p, alphabet):
+    if not p:
+        return np.prod(y[:, 0]).item()
     # Initialize z:
     z = []
     for i in range(2 * len(p) + 1):
@@ -38,7 +40,7 @@ def ctc_loss(y, p, alphabet):
     print("=== alpha ===")
     print(alpha)
 
-    return alpha[-1, -1]
+    return (alpha[-1, -1] + alpha[-2, -1]).item()
 
 
 def print_p(p: float):

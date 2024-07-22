@@ -7,14 +7,20 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 
-def load_data(data_path="data", sample_rate=16000, n_mfcc=13):
-    categories = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
-    sets = ['train', 'val', 'test']
-    data = {set_name: [] for set_name in sets}
-    labels = {set_name: [] for set_name in sets}
+# === Global Vars ===
 
-    for set_name in sets:
-        for label, category in enumerate(categories):
+DATA_PATH = "data"
+DATA_CLASSES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+DATA_SETS = ['train', 'val', 'test']
+
+# === Data ===
+
+def load_data(data_path=DATA_PATH, sample_rate=16000, n_mfcc=13):
+    data = {set_name: [] for set_name in DATA_SETS}
+    labels = {set_name: [] for set_name in DATA_SETS}
+
+    for set_name in DATA_SETS:
+        for label, category in enumerate(DATA_CLASSES):
             category_path = os.path.join(data_path, set_name, category)
             for file_name in os.listdir(category_path):
                 if file_name.endswith('.wav'):
@@ -29,27 +35,15 @@ def load_data(data_path="data", sample_rate=16000, n_mfcc=13):
             np.array(data['test']), np.array(labels['test']))
 
 def preprocess_data(train_data, val_data, test_data):
-    # Find the maximum length of sequences
-    max_length = max(max(len(seq) for seq in train_data),
-                     max(len(seq) for seq in val_data),
-                     max(len(seq) for seq in test_data))
-
-    # Pad sequences to have the same length
-    def pad_sequences(data):
-        return np.array([np.pad(seq, ((0, max_length - len(seq)), (0, 0)), mode='constant') for seq in data])
-
-    train_data_padded = pad_sequences(train_data)
-    val_data_padded = pad_sequences(val_data)
-    test_data_padded = pad_sequences(test_data)
-
     # Reshape data to 2D (batch_size, time_steps * features)
-    train_data_reshaped = train_data_padded.reshape(train_data_padded.shape[0], -1)
-    val_data_reshaped = val_data_padded.reshape(val_data_padded.shape[0], -1)
-    test_data_reshaped = test_data_padded.reshape(test_data_padded.shape[0], -1)
+    train_data_reshaped = train_data.reshape(train_data.shape[0], -1)
+    val_data_reshaped = val_data.reshape(val_data.shape[0], -1)
+    test_data_reshaped = test_data.reshape(test_data.shape[0], -1)
 
     # Normalize data
     mean = np.mean(train_data_reshaped)
     std = np.std(train_data_reshaped)
+
     train_data_normalized = (train_data_reshaped - mean) / std
     val_data_normalized = (val_data_reshaped - mean) / std
     test_data_normalized = (test_data_reshaped - mean) / std
@@ -63,6 +57,8 @@ train_data, val_data, test_data = preprocess_data(train_data, val_data, test_dat
 print("Train data shape:", train_data.shape)
 print("Validation data shape:", val_data.shape)
 print("Test data shape:", test_data.shape)
+
+# === Models ===
 
 class LinearModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
@@ -141,6 +137,8 @@ def concatenate_features(data, window_size):
         result.append(concatenated)
     return np.array(result)
 
+
+# === Training ===
 
 # Load and preprocess data
 train_data, train_labels, val_data, val_labels, test_data, test_labels = load_data()

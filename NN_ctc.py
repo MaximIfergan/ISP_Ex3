@@ -38,9 +38,9 @@ def load_data(data_path=DATA_PATH, sample_rate=16000, n_mfcc=13):
                     data[set_name].append(mfcc.T)  # Transpose to have time as the first dimension
                     labels[set_name].append(label)
 
-    return (np.array(data['train']), np.array(labels['train']),
-            np.array(data['val']), np.array(labels['val']),
-            np.array(data['test']), np.array(labels['test']))
+    return ((data['train'], labels['train'],
+            data['val'], labels['val'],
+            data['test'], labels['test']))
 
 
 def preprocess_data(train_data, val_data, test_data):
@@ -142,18 +142,18 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 def concatenate_features(data, window_size):
     result = []
     for sample in data:
-        concatenated = np.concatenate([sample[0][i:i + window_size] for i in range(len(sample[0]) - window_size + 1)], axis=1)
+        concatenated = np.concatenate([sample[0][i:i + window_size] for i in range(len(sample[0]) - window_size + 1)], axis=0)
         result.append(concatenated)
     return np.array(result)
 
 # === Experiment Code ===
 
 train_data, train_labels, val_data, val_labels, test_data, test_labels = load_data()
-train_data, val_data, test_data = preprocess_data(train_data, val_data, test_data)
+# train_data, val_data, test_data = preprocess_data(train_data, val_data, test_data)
 
-print("Train data shape:", train_data.shape)
-print("Validation data shape:", val_data.shape)
-print("Test data shape:", test_data.shape)
+# print("Train data shape:", train_data.shape)
+# print("Validation data shape:", val_data.shape)
+# print("Test data shape:", test_data.shape)
 
 # Define hyperparameters and options
 optimizers = [
@@ -168,7 +168,7 @@ models = [
     ('RNN', RNNModel)
 ]
 
-feature_windows = [1, 3, 5]  # 1 means no concatenation
+feature_windows = [2, 3, 5]  # 1 means no concatenation
 
 hidden_size = 128
 num_classes = len(IDX_TO_CHAR)
@@ -185,20 +185,20 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
             train_data_concat = concatenate_features(train_data, window_size)
             val_data_concat = concatenate_features(val_data, window_size)
 
-            train_data_processed, val_data_processed, _ = preprocess_data(train_data_concat, val_data_concat,
-                                                                          val_data_concat)
+            # train_data_processed, val_data_processed, _ = preprocess_data(train_data, val_data,
+            #                                                               val_data)
 
-            input_size = train_data_processed.shape[1]
+            input_size = train_data[0].shape[1]
 
             # Create datasets and dataloaders
             # train_dataset = TensorDataset(torch.FloatTensor(train_data_processed), torch.LongTensor(train_labels))
             # val_dataset = TensorDataset(torch.FloatTensor(val_data_processed), torch.LongTensor(val_labels))
 
-            train_dataset = TensorDataset(torch.FloatTensor(train_data_processed),
-                                          [torch.LongTensor(convert_label_to_char_sequence(label)) for label in
-                                           train_labels])
-            val_dataset = TensorDataset(torch.FloatTensor(val_data_processed),
-                                        [torch.LongTensor(convert_label_to_char_sequence(label)) for label in
+            train_dataset = TensorDataset((torch.FloatTensor(train_data_concat),
+                                          torch.tensor([convert_label_to_char_sequence(label) for label in
+                                           train_labels])))
+            val_dataset = TensorDataset(torch.FloatTensor(val_data_concat),
+                                        [convert_label_to_char_sequence(label) for label in
                                          val_labels])
 
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

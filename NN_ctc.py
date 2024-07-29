@@ -6,14 +6,23 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
+import torch.nn.functional as F
 
-# === Global Vars ===
+# ====  Global Vars ====
 
 DATA_PATH = "./"
 DATA_CLASSES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
 DATA_SETS = ['train', 'val', 'test']
+IDX_TO_CHAR = {0: '', 1: 'e', 2: 'f', 3: 'g', 4: 'h', 5: 'i', 6: 'n', 7: 'o', 8: 'r', 9: 's', 10: 't', 11: 'u', 12: 'v', 13: 'w', 14: 'x', 15: 'z'}
+CHAR_TO_IDX = {'': 0, 'e': 1, 'f': 2, 'g': 3, 'h': 4, 'i': 5, 'n': 6, 'o': 7, 'r': 8, 's': 9, 't': 10, 'u': 11, 'v': 12, 'w': 13, 'x': 14, 'z': 15}
 
-# === Data ===
+# ====  Global Function ====
+
+def convert_label_to_char_sequence(label):
+    digit_name = DATA_CLASSES[label]
+    return [CHAR_TO_IDX[char] for char in digit_name]
+
+# ====  Data    ====
 def load_data(data_path=DATA_PATH, sample_rate=16000, n_mfcc=13):
     data = {set_name: [] for set_name in DATA_SETS}
     labels = {set_name: [] for set_name in DATA_SETS}
@@ -62,8 +71,8 @@ class LinearModel(nn.Module):
     def forward(self, x):
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
-        return x
-
+        x = F.log_softmax(x, dim=-1)  # Apply log_softmax
+        return x.unsqueeze(0)  # Add time dimension (1, batch_size, num_classes)
 
 class ConvModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
@@ -77,8 +86,8 @@ class ConvModel(nn.Module):
         x = self.relu(self.conv(x))
         x = x.view(x.size(0), -1)  # Flatten
         x = self.fc(x)
-        return x
-
+        x = F.log_softmax(x, dim=-1)  # Apply log_softmax
+        return x.unsqueeze(0)  # Add time dimension (1, batch_size, num_classes)
 
 class RNNModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
@@ -88,8 +97,9 @@ class RNNModel(nn.Module):
 
     def forward(self, x):
         x, _ = self.rnn(x)
-        x = self.fc(x[:, -1, :])  # Use the last hidden state
-        return x
+        x = self.fc(x)
+        x = F.log_softmax(x, dim=-1)  # Apply log_softmax
+        return x  # Shape: (batch_size, sequence_length, num_classes)
 
 # === Training ===
 
@@ -100,9 +110,12 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         for inputs, targets in train_loader:
             optimizer.zero_grad()
             outputs = model(inputs)
-            outputs_len = torch.full(size=outputs.shape[1], fill_value=outputs.shape[0])
-            targets_len = torch.full(size=targets.shape[1], fill_value=targets.shape[0])
-            loss = criterion(outputs, targets, outputs_len, targets_len)
+            if len(outputs.shape) == 3:
+                outputs = outputs.transpose(0, 1)  # Change to (sequence_length, batch_size, num_classes) if needed
+            output_lengths = torch.full(size=(outputs.shape[1],), fill_value=outputs.shape[0], dtype=torch.long)
+            target_lengths = torch.LongTensor([len(t) for t in targets])
+            targets = torch.cat(targets)
+            loss = criterion(outputs, targets, output_lengths, target_lengths)
             loss.backward()
             optimizer.step()
 
@@ -113,9 +126,10 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         with torch.no_grad():
             for inputs, targets in val_loader:
                 outputs = model(inputs)
-                _, predicted = torch.max(outputs.data, 1)
-                total += targets.size(0)
-                correct += (predicted == targets).sum().item()
+                decoded_outputs = torch.argmax(outputs, dim=-1)
+                predicted_labels = [''.join([IDX_TO_CHAR[idx.item()] for idx in output if idx != 0]) for output in decoded_outputs]
+                correct += sum([pred == DATA_CLASSES[targets[i][0].item()] for i, pred in enumerate(predicted_labels)])
+                total += len(targets)
 
         accuracy = 100 * correct / total
         if accuracy > best_accuracy:
@@ -157,7 +171,7 @@ models = [
 feature_windows = [1, 3, 5]  # 1 means no concatenation
 
 hidden_size = 128
-num_classes = 10
+num_classes = len(IDX_TO_CHAR)
 num_epochs = 10
 batch_size = 32
 
@@ -177,8 +191,15 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
             input_size = train_data_processed.shape[1]
 
             # Create datasets and dataloaders
-            train_dataset = TensorDataset(torch.FloatTensor(train_data_processed), torch.LongTensor(train_labels))
-            val_dataset = TensorDataset(torch.FloatTensor(val_data_processed), torch.LongTensor(val_labels))
+            # train_dataset = TensorDataset(torch.FloatTensor(train_data_processed), torch.LongTensor(train_labels))
+            # val_dataset = TensorDataset(torch.FloatTensor(val_data_processed), torch.LongTensor(val_labels))
+
+            train_dataset = TensorDataset(torch.FloatTensor(train_data_processed),
+                                          [torch.LongTensor(convert_label_to_char_sequence(label)) for label in
+                                           train_labels])
+            val_dataset = TensorDataset(torch.FloatTensor(val_data_processed),
+                                        [torch.LongTensor(convert_label_to_char_sequence(label)) for label in
+                                         val_labels])
 
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)

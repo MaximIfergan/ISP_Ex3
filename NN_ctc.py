@@ -9,12 +9,11 @@ import numpy as np
 
 # === Global Vars ===
 
-DATA_PATH = "data"
+DATA_PATH = "./"
 DATA_CLASSES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
 DATA_SETS = ['train', 'val', 'test']
 
 # === Data ===
-
 def load_data(data_path=DATA_PATH, sample_rate=16000, n_mfcc=13):
     data = {set_name: [] for set_name in DATA_SETS}
     labels = {set_name: [] for set_name in DATA_SETS}
@@ -33,6 +32,7 @@ def load_data(data_path=DATA_PATH, sample_rate=16000, n_mfcc=13):
     return (np.array(data['train']), np.array(labels['train']),
             np.array(data['val']), np.array(labels['val']),
             np.array(data['test']), np.array(labels['test']))
+
 
 def preprocess_data(train_data, val_data, test_data):
     # Reshape data to 2D (batch_size, time_steps * features)
@@ -93,14 +93,16 @@ class RNNModel(nn.Module):
 
 # === Training ===
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, input_size):
     best_accuracy = 0
     for epoch in range(num_epochs):
         model.train()
         for inputs, targets in train_loader:
             optimizer.zero_grad()
             outputs = model(inputs)
-            loss = criterion(outputs, targets)
+            outputs_len = torch.full(size=outputs.shape[1], fill_value=outputs.shape[0])
+            targets_len = torch.full(size=targets.shape[1], fill_value=targets.shape[0])
+            loss = criterion(outputs, targets, outputs_len, targets_len)
             loss.backward()
             optimizer.step()
 
@@ -186,7 +188,7 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
 
             # Initialize optimizer and loss function
             optimizer = optimizer_class(model.parameters(), **optimizer_params)
-            criterion = nn.CrossEntropyLoss()
+            criterion = nn.CTCLoss()
 
             # Print model and training parameters
             print(f"\nModel: {model_name}")
@@ -197,7 +199,7 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
             print(f"Optimizer parameters: {optimizer_params}")
 
             # Train and evaluate model
-            accuracy = train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs)
+            accuracy = train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, input_size)
 
             # Update best configuration if necessary
             if accuracy > best_accuracy:

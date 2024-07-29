@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import torch.nn.functional as F
 import random
+import itertools
 
 # ====  Global Vars ====
 
@@ -161,75 +162,55 @@ models = [
     ('RNN', RNNModel)
 ]
 
-# feature_windows = [1, 3, 5]  # 1 means no concatenation
-feature_windows = [3, 5]  # 1 means no concatenation
+feature_windows = [1, 3, 5]  # 1 means no concatenation
 
-hidden_size = 128
+hidden_size = [64, 128, 256]
+
 num_classes = len(IDX_TO_CHAR)
 num_epochs = 10
 batch_size = 32
 
 best_config = None
 best_accuracy = 0
-data = concatenate_adjacent_features(data, 3)
 
-#
-# for optimizer_name, optimizer_class, optimizer_params in optimizers:
-#     for model_name, model_class in models:
-#         for window_size in feature_windows:
-#
-#             # Preprocess data with feature concatenation
-#             data = concatenate_adjacent_features(data, window_size)
-#
-#             # train_data_processed, val_data_processed, _ = preprocess_data(train_data, val_data,
-#             #                                                               val_data)
-#             #
-#             # # input_size = train_data[0].shape[1]
-#             #
-#             # # Create datasets and dataloaders
-#             # # train_dataset = TensorDataset(torch.FloatTensor(train_data_processed), torch.LongTensor(train_labels))
-#             # # val_dataset = TensorDataset(torch.FloatTensor(val_data_processed), torch.LongTensor(val_labels))
-#             #
-#             # train_dataset = TensorDataset((torch.FloatTensor(train_data_concat),
-#             #                               torch.tensor([convert_label_to_char_sequence(label) for label in
-#             #                                train_labels])))
-#             # val_dataset = TensorDataset(torch.FloatTensor(val_data_concat),
-#             #                             [convert_label_to_char_sequence(label) for label in
-#             #                              val_labels])
-#
-#             # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-#             # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-#             #
-#             # # Initialize model
-#             # model = model_class(input_size, hidden_size, num_classes)
-#
-#             # Initialize optimizer and loss function
-#             optimizer = optimizer_class(model.parameters(), **optimizer_params)
-#             criterion = nn.CTCLoss()
-#
-#             # Print model and training parameters
-#             print(f"\nModel: {model_name}")
-#             print(f"Optimizer: {optimizer_name}")
-#             print(f"Feature window size: {window_size}")
-#             print(f"Input size: {input_size}")
-#             print(model)
-#             print(f"Optimizer parameters: {optimizer_params}")
-#
-#             # Train and evaluate model
-#             accuracy = train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, input_size)
-#
-#             # Update best configuration if necessary
-#             if accuracy > best_accuracy:
-#                 best_accuracy = accuracy
-#                 best_config = {
-#                     'model': model_name,
-#                     'optimizer': optimizer_name,
-#                     'feature_window': window_size,
-#                     'accuracy': accuracy
-#                 }
-#
-# print("\nBest configuration:")
-# print(f"Model: {best_config['model']}")
-# print(f"Optimizer: {best_config['optimizer']}")
-# print(f"Feature window size: {best_config['feature_window']}")
-# print(f"Best validation accuracy: {best_config['accuracy']:.2f}%")
+for optimizer, model, window_size, hidden_size in itertools.product(*somelists):
+
+for optimizer_name, optimizer_class, optimizer_params in optimizers:
+    for model_name, model_class in models:
+        for window_size in feature_windows:
+
+            # Preprocess data with feature concatenation
+            data = concatenate_adjacent_features(data, window_size)
+
+            # Initialize model
+            model = model_class(data["train"][0][0].shape[1], hidden_size, num_classes)
+
+            # Initialize optimizer and loss function
+            optimizer = optimizer_class(model.parameters(), **optimizer_params)
+            criterion = nn.CTCLoss()
+
+            # Print model and training parameters
+            print(f"\nModel: {model_name}")
+            print(f"Optimizer: {optimizer_name}")
+            print(f"Feature window size: {window_size}")
+            print(model)
+            print(f"Optimizer parameters: {optimizer_params}")
+
+            # Train and evaluate model
+            accuracy = train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, input_size)
+
+            # Update best configuration if necessary
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
+                best_config = {
+                    'model': model_name,
+                    'optimizer': optimizer_name,
+                    'feature_window': window_size,
+                    'accuracy': accuracy
+                }
+
+print("\nBest configuration:")
+print(f"Model: {best_config['model']}")
+print(f"Optimizer: {best_config['optimizer']}")
+print(f"Feature window size: {best_config['feature_window']}")
+print(f"Best validation accuracy: {best_config['accuracy']:.2f}%")

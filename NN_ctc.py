@@ -49,15 +49,15 @@ def preprocess_data(train_data, val_data, test_data):
     val_data_reshaped = val_data.reshape(val_data.shape[0], -1)
     test_data_reshaped = test_data.reshape(test_data.shape[0], -1)
 
-    # Normalize data
-    mean = np.mean(train_data_reshaped)
-    std = np.std(train_data_reshaped)
+    # # Normalize data
+    # mean = np.mean(train_data_reshaped)
+    # std = np.std(train_data_reshaped)
+    #
+    # train_data_normalized = (train_data_reshaped - mean) / std
+    # val_data_normalized = (val_data_reshaped - mean) / std
+    # test_data_normalized = (test_data_reshaped - mean) / std
 
-    train_data_normalized = (train_data_reshaped - mean) / std
-    val_data_normalized = (val_data_reshaped - mean) / std
-    test_data_normalized = (test_data_reshaped - mean) / std
-
-    return train_data_normalized, val_data_normalized, test_data_normalized
+    return train_data_reshaped, val_data_reshaped, test_data_reshaped
 
 # === Models ===
 
@@ -142,7 +142,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 def concatenate_features(data, window_size):
     result = []
     for sample in data:
-        concatenated = np.concatenate([sample[i:i + window_size] for i in range(len(sample) - window_size + 1)], axis=1)
+        concatenated = np.concatenate([sample[0][i:i + window_size] for i in range(len(sample[0]) - window_size + 1)], axis=1)
         result.append(concatenated)
     return np.array(result)
 

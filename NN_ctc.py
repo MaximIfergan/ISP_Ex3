@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 # ====  Global Vars ====
 
-DATA_PATH = "./"
+DATA_PATH = "./data/"
 DATA_CLASSES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
 DATA_SETS = ['train', 'val', 'test']
 IDX_TO_CHAR = {0: '', 1: 'e', 2: 'f', 3: 'g', 4: 'h', 5: 'i', 6: 'n', 7: 'o', 8: 'r', 9: 's', 10: 't', 11: 'u', 12: 'v', 13: 'w', 14: 'x', 15: 'z'}
@@ -59,7 +59,7 @@ def preprocess_data(train_data, val_data, test_data):
 
     return train_data_reshaped, val_data_reshaped, test_data_reshaped
 
-# === Models ===
+# ====  Models  ====
 
 class LinearModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
@@ -146,7 +146,7 @@ def concatenate_features(data, window_size):
         result.append(concatenated)
     return np.array(result)
 
-# === Experiment Code ===
+# ====  Experiment Code ====
 
 train_data, train_labels, val_data, val_labels, test_data, test_labels = load_data()
 train_data, val_data, test_data = preprocess_data(train_data, val_data, test_data)
@@ -181,12 +181,12 @@ best_accuracy = 0
 for optimizer_name, optimizer_class, optimizer_params in optimizers:
     for model_name, model_class in models:
         for window_size in feature_windows:
-            # Preprocess data with feature concatenation
-            train_data_concat = concatenate_features(train_data, window_size)
-            val_data_concat = concatenate_features(val_data, window_size)
 
-            train_data_processed, val_data_processed, _ = preprocess_data(train_data_concat, val_data_concat,
-                                                                          val_data_concat)
+            # Preprocess data with feature concatenation
+            # train_data_concat = concatenate_features(train_data, window_size)
+            # val_data_concat = concatenate_features(val_data, window_size)
+
+            train_data_processed, val_data_processed, _ = preprocess_data(train_data, val_data, val_data)
 
             input_size = train_data_processed.shape[1]
 

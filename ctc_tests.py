@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from ctc import ctc_loss
 
+
 class TestCTCLoss(unittest.TestCase):
 
     def test_simple_case(self):
@@ -66,6 +67,7 @@ class TestCTCLoss(unittest.TestCase):
         expected = 0.02592
         result = ctc_loss(y, p, alphabet)
         self.assertAlmostEqual(result, expected, places=5)
+
 
 if __name__ == '__main__':
     unittest.main()

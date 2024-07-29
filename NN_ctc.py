@@ -50,14 +50,6 @@ def preprocess_data(train_data, val_data, test_data):
 
     return train_data_normalized, val_data_normalized, test_data_normalized
 
-# Usage example:
-train_data, train_labels, val_data, val_labels, test_data, test_labels = load_data()
-train_data, val_data, test_data = preprocess_data(train_data, val_data, test_data)
-
-print("Train data shape:", train_data.shape)
-print("Validation data shape:", val_data.shape)
-print("Test data shape:", test_data.shape)
-
 # === Models ===
 
 class LinearModel(nn.Module):
@@ -99,6 +91,7 @@ class RNNModel(nn.Module):
         x = self.fc(x[:, -1, :])  # Use the last hidden state
         return x
 
+# === Training ===
 
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs):
     best_accuracy = 0
@@ -137,11 +130,14 @@ def concatenate_features(data, window_size):
         result.append(concatenated)
     return np.array(result)
 
+# === Experiment Code ===
 
-# === Training ===
-
-# Load and preprocess data
 train_data, train_labels, val_data, val_labels, test_data, test_labels = load_data()
+train_data, val_data, test_data = preprocess_data(train_data, val_data, test_data)
+
+print("Train data shape:", train_data.shape)
+print("Validation data shape:", val_data.shape)
+print("Test data shape:", test_data.shape)
 
 # Define hyperparameters and options
 optimizers = [
@@ -160,7 +156,7 @@ feature_windows = [1, 3, 5]  # 1 means no concatenation
 
 hidden_size = 128
 num_classes = 10
-num_epochs = 30
+num_epochs = 10
 batch_size = 32
 
 best_config = None

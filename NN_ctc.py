@@ -200,7 +200,7 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
                                            train_labels])))
             val_dataset = TensorDataset(torch.FloatTensor(val_data_concat),
                                         [convert_label_to_char_sequence(label) for label in
-                                         val_labels])
+                                         val_labels]
 
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)

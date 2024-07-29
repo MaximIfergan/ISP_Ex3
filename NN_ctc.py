@@ -90,8 +90,9 @@ class RNNModel(nn.Module):
 
 # === Training ===
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, input_size):
+def train_model(model, train_loader, val_loader, optimizer, num_epochs, input_size):
     best_accuracy = 0
+    criterion = nn.CTCLoss()
     for epoch in range(num_epochs):
         model.train()
         for inputs, targets in train_loader:
@@ -164,7 +165,7 @@ models = [
 
 feature_windows = [1, 3, 5]  # 1 means no concatenation
 
-hidden_size = [64, 128, 256]
+hidden_size = 128
 
 num_classes = len(IDX_TO_CHAR)
 num_epochs = 10
@@ -172,8 +173,6 @@ batch_size = 32
 
 best_config = None
 best_accuracy = 0
-
-for optimizer, model, window_size, hidden_size in itertools.product(*somelists):
 
 for optimizer_name, optimizer_class, optimizer_params in optimizers:
     for model_name, model_class in models:
@@ -187,7 +186,6 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
 
             # Initialize optimizer and loss function
             optimizer = optimizer_class(model.parameters(), **optimizer_params)
-            criterion = nn.CTCLoss()
 
             # Print model and training parameters
             print(f"\nModel: {model_name}")

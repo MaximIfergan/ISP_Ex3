@@ -95,7 +95,10 @@ def train_model(model, data, optimizer, num_epochs, batch_size):
     criterion = nn.CTCLoss()
     for epoch in range(num_epochs):
         model.train()
-        batch_data = [data['train'][i:i + batch_size] for i in range(0, len(data['train']), batch_size)]
+        batch_data_input = [data['train'][i:i + batch_size][0]
+                            for i in range(0, len(data['train']), batch_size)]
+        batch_data_target = [data['train'][i:i + batch_size][1]
+                             for i in range(0, len(data['train']), batch_size)]
         for batch in batch_data:
             optimizer.zero_grad()
             for inputs, targets in batch:

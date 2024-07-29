@@ -90,18 +90,20 @@ class RNNModel(nn.Module):
 
 # === Training ===
 
-def train_model(model, data, val_loader, optimizer, num_epochs):
+def train_model(model, data, optimizer, num_epochs, batch_size):
     best_accuracy = 0
     criterion = nn.CTCLoss()
     for epoch in range(num_epochs):
         model.train()
-        for inputs, targets in data['train']:
+        batch_data = [data['train'][i:i + batch_size] for i in range(0, len(data['train']), batch_size)]
+        for batch in batch_data:
             optimizer.zero_grad()
-            outputs = model(inputs)
-            output_lengths = torch.full(size=(outputs.shape[1],), fill_value=outputs.shape[0], dtype=torch.long)
-            target_lengths = torch.LongTensor([len(t) for t in targets])
-            targets = torch.cat(targets)
-            loss = criterion(outputs, targets, output_lengths, target_lengths)
+            for inputs, targets in batch:
+                outputs = model(inputs)
+                output_lengths = torch.full(size=(outputs.shape[1],), fill_value=outputs.shape[0], dtype=torch.long)
+                target_lengths = torch.LongTensor([len(t) for t in targets])
+                targets = torch.cat(targets)
+                loss = criterion(outputs, targets, output_lengths, target_lengths)
             loss.backward()
             optimizer.step()
 
@@ -193,7 +195,7 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
             print(f"Optimizer parameters: {optimizer_params}")
 
             # Train and evaluate model
-            accuracy = train_model(model, data, val_loader, criterion, optimizer, num_epochs, input_size)
+            accuracy = train_model(model, data, optimizer, num_epochs, batch_size)
 
             # Update best configuration if necessary
             if accuracy > best_accuracy:

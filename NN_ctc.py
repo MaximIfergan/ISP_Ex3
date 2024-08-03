@@ -23,6 +23,7 @@ CHAR_TO_IDX = {'': 0, 'e': 1, 'f': 2, 'g': 3, 'h': 4, 'i': 5, 'n': 6, 'o': 7, 'r
 MAX_TARGET_SEQ_LEN = max([len(class_label) for class_label in DATA_CLASSES])
 random.seed(18)
 
+
 # ====  Global Function ====
 
 def convert_label_to_char_sequence(label):
@@ -144,7 +145,8 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             batch_count += 1
 
             if batch_count % 1 == 0:
-                print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_count}/{len(batch_data_input)}, Loss: {loss.item():.4f}")
+                print(
+                    f"Epoch {epoch + 1}/{num_epochs}, Batch {batch_count}/{len(batch_data_input)}, Loss: {loss.item():.4f}")
 
     accuracy = validate_model(model, data["val"], batch_size, max_seq_len)
     print(f"Validation Accuracy: {accuracy}")
@@ -181,7 +183,8 @@ def validate_model_old(model, data, batch_size, max_seq_len):
     with torch.no_grad():
         for inputs, targets in zip(batch_data_input, batch_data_target):
             # Pad inputs to max_seq_len
-            padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in inputs]
+            padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in
+                             inputs]
             padded_inputs = torch.stack(padded_inputs)
 
             outputs = model(padded_inputs)  # Shape: (batch_size, max_seq_len, num_classes)
@@ -271,12 +274,12 @@ def concatenate_adjacent_features(data, window_size):
 
 # ====  Experiment Code ====
 
-n_train, n_val, n_test = 8, 8, 8
-data = load_data(n_train, n_val, n_test)
+n_train, n_val, n_test = 100, 20, 20
+orig_data = load_data(n_train, n_val, n_test)
 
-print("(#) Train data samples: ", len(data["train"]))
-print("(#) Validation data samples: ", len(data["val"]))
-print("(#) Test data samples: ", len(data["test"]))
+print("(#) Train data samples: ", len(orig_data["train"]))
+print("(#) Validation data samples: ", len(orig_data["val"]))
+print("(#) Test data samples: ", len(orig_data["test"]))
 
 # Define hyperparameters and options
 optimizers = [
@@ -304,7 +307,7 @@ best_accuracy = 0
 for window_size in feature_windows:
 
     # Preprocess data with feature concatenation
-    data, max_seq_len = concatenate_adjacent_features(data, window_size)
+    data, max_seq_len = concatenate_adjacent_features(orig_data, window_size)
 
     for optimizer_name, optimizer_class, optimizer_params in optimizers:
         for model_name, model_class in models:
@@ -327,9 +330,8 @@ for window_size in feature_windows:
             if val_accuracy > best_accuracy:
                 best_accuracy = val_accuracy
                 best_model = model
-                best_config = {"window_size" : window_size, "optimizer_name": optimizer_name,
-                                      "optimizer_params": optimizer_params, "model_name": model_name}
-
+                best_config = {"window_size": window_size, "optimizer_name": optimizer_name,
+                               "optimizer_params": optimizer_params, "model_name": model_name}
 
 # After all experiments, print best model details and evaluate on test set
 print("\nBest Model Details:")
@@ -339,5 +341,7 @@ print(f"Feature window size: {best_config['window_size']}")
 print(f"Optimizer parameters: {best_config['optimizer_params']}")
 print(f"Best Validation Accuracy: {best_accuracy:.2f}%")
 
+data, max_seq_len = concatenate_adjacent_features(orig_data, best_config['window_size'])
 test_accuracy = validate_model(best_model, data['test'], batch_size, max_seq_len)
+
 print(f"Test Accuracy: {test_accuracy:.2f}%")

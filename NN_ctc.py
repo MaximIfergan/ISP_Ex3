@@ -231,7 +231,7 @@ def concatenate_adjacent_features(data, window_size):
 
 # ====  Experiment Code ====
 
-n_train, n_val, n_test = -1, -1, -1
+n_train, n_val, n_test = 20, 20, 20
 orig_data = load_data(n_train, n_val, n_test)
 # orig_data = load_data()
 
@@ -342,7 +342,10 @@ def plot_averages(param_name, possible_values):
     plt.title(f"Average Validation Accuracy by {param_name}")
     plt.xlabel(param_name)
     plt.ylabel("Average Validation Accuracy")
-    plt.show()
+
+    filename = f"{param_name}_accuracy.png"
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.close()  # Close the figure to free up memory
 
 # Plot for each hyperparameter
 plot_averages("optimizer_name", ["SGD", "Adam", "AdamW"])

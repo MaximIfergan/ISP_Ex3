@@ -130,6 +130,10 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             loss.backward()
             optimizer.step()
 
+
+        accuracy = validate_model(model, data, batch_size, max_seq_len, criterion)
+        print(f"accuracy: {accuracy}")
+
         # # Validation
         # model.eval()
         # correct = 0
@@ -148,7 +152,52 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
         #     best_accuracy = accuracy
         # print(f'Epoch {epoch + 1}/{num_epochs}, Validation Accuracy: {accuracy:.2f}%')
 
-    return best_accuracy
+    return accuracy
+
+
+def validate_model(model, data, batch_size, max_seq_len, criterion):
+    model.eval()
+    total_loss = 0
+    correct = 0
+    total = 0
+
+    batch_data_input = [[sample[0] for sample in data['val'][i:i + batch_size]]
+                        for i in range(0, len(data['val']), batch_size)]
+    batch_data_target = [[sample[1] for sample in data['val'][i:i + batch_size]]
+                         for i in range(0, len(data['val']), batch_size)]
+
+    with torch.no_grad():
+        for inputs, targets in zip(batch_data_input, batch_data_target):
+            # Store original input lengths
+            input_lengths = torch.LongTensor([x.shape[0] for x in inputs])
+
+            # Pad inputs to max_seq_len
+            padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in inputs]
+            padded_inputs = torch.stack(padded_inputs)
+
+            outputs = model(padded_inputs)  # Shape: (batch_size, max_seq_len, num_classes)
+
+            # Transpose outputs to (max_seq_len, batch_size, num_classes)
+            outputs = outputs.squeeze(0).transpose(0, 1)
+
+            # Convert targets to tensor and pad to MAX_TARGET_SEQ_LEN
+            target_lengths = torch.LongTensor([len(convert_label_to_char_sequence(t)) for t in targets])
+            padded_targets = [torch.nn.functional.pad(torch.LongTensor(convert_label_to_char_sequence(t)),
+                                                      (0, MAX_TARGET_SEQ_LEN - len(convert_label_to_char_sequence(t))))
+                              for t in targets]
+            padded_targets = torch.stack(padded_targets)
+
+            loss = criterion(outputs, padded_targets, input_lengths, target_lengths)
+            total_loss += loss.item()
+
+            # Decoding
+            decoded_outputs = torch.argmax(outputs.transpose(0, 1), dim=-1)
+            predicted_labels = [''.join([IDX_TO_CHAR[idx.item()] for idx in output if idx != 0]) for output in decoded_outputs]
+            correct += sum([pred == DATA_CLASSES[targets[i]] for i, pred in enumerate(predicted_labels)])
+            total += len(targets)
+
+    accuracy = 100 * correct / total
+    return accuracy
 
 
 def concatenate_adjacent_features(data, window_size):

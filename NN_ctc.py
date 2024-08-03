@@ -220,9 +220,12 @@ def validate_model_claude(model, data, max_seq_len, batch_size):
             outputs = outputs.squeeze(0).transpose(0, 1)  # Shape: (max_seq_len, batch_size, num_classes)
 
             for j, label in enumerate(labels):
+
                 best_loss = float('inf')
                 best_digit = -1
+
                 for digit, class_name in enumerate(DATA_CLASSES):
+
                     target = torch.LongTensor([CHAR_TO_IDX[char] for char in class_name]).unsqueeze(0)
                     target_length = torch.LongTensor([len(class_name)])
 

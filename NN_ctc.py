@@ -195,7 +195,7 @@ hidden_size = 128
 
 num_classes = len(IDX_TO_CHAR)
 num_epochs = 10
-batch_size = 32
+batch_size = 8
 
 best_config = None
 best_accuracy = 0

@@ -342,7 +342,6 @@ def plot_averages(param_name, possible_values):
     plt.title(f"Average Validation Accuracy by {param_name}")
     plt.xlabel(param_name)
     plt.ylabel("Average Validation Accuracy")
-
     filename = f"{param_name}_accuracy.png"
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()  # Close the figure to free up memory

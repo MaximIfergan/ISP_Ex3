@@ -174,7 +174,7 @@ def validate_model(model, data, batch_size, max_seq_len, criterion):
 
     with torch.no_grad():
         for inputs, targets in zip(batch_data_input, batch_data_target):
-            # Store original input length
+            # Store original input lengths
             input_lengths = torch.LongTensor([x.shape[0] for x in inputs])
 
             # Pad inputs to max_seq_len

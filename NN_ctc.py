@@ -15,8 +15,10 @@ import itertools
 DATA_PATH = "./data/"
 DATA_CLASSES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
 DATA_SETS = ['train', 'val', 'test']
-IDX_TO_CHAR = {0: '', 1: 'e', 2: 'f', 3: 'g', 4: 'h', 5: 'i', 6: 'n', 7: 'o', 8: 'r', 9: 's', 10: 't', 11: 'u', 12: 'v', 13: 'w', 14: 'x', 15: 'z'}
-CHAR_TO_IDX = {'': 0, 'e': 1, 'f': 2, 'g': 3, 'h': 4, 'i': 5, 'n': 6, 'o': 7, 'r': 8, 's': 9, 't': 10, 'u': 11, 'v': 12, 'w': 13, 'x': 14, 'z': 15}
+IDX_TO_CHAR = {0: '', 1: 'e', 2: 'f', 3: 'g', 4: 'h', 5: 'i', 6: 'n', 7: 'o', 8: 'r', 9: 's', 10: 't', 11: 'u', 12: 'v',
+               13: 'w', 14: 'x', 15: 'z'}
+CHAR_TO_IDX = {'': 0, 'e': 1, 'f': 2, 'g': 3, 'h': 4, 'i': 5, 'n': 6, 'o': 7, 'r': 8, 's': 9, 't': 10, 'u': 11, 'v': 12,
+               'w': 13, 'x': 14, 'z': 15}
 MAX_TARGET_SEQ_LEN = max([len(class_label) for class_label in DATA_CLASSES])
 random.seed(18)
 
@@ -26,11 +28,11 @@ def convert_label_to_char_sequence(label):
     digit_name = DATA_CLASSES[label]
     return [CHAR_TO_IDX[char] for char in digit_name]
 
+
 # ====  Data    ====
 def load_data(n_train=-1, n_val=-1, n_test=-1, data_path=DATA_PATH, sample_rate=16000, n_mfcc=13):
-
     data = {set_name: [] for set_name in DATA_SETS}
-    n_samples = {'train': n_train, 'val':n_val, 'test':n_test}
+    n_samples = {'train': n_train, 'val': n_val, 'test': n_test}
 
     for set_name in DATA_SETS:
         for label, category in enumerate(DATA_CLASSES):
@@ -47,6 +49,7 @@ def load_data(n_train=-1, n_val=-1, n_test=-1, data_path=DATA_PATH, sample_rate=
 
     return data
 
+
 # ====  Models  ====
 
 class LinearModel(nn.Module):
@@ -62,20 +65,23 @@ class LinearModel(nn.Module):
         x = F.log_softmax(x, dim=-1)  # Apply log_softmax
         return x.unsqueeze(0)  # Add time dimension (1, batch_size, num_classes)
 
+
 class ConvModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
         super(ConvModel, self).__init__()
-        self.conv = nn.Conv1d(1, hidden_size, kernel_size=3, stride=1, padding=1)
-        self.fc = nn.Linear(hidden_size * input_size, num_classes)
+        self.conv = nn.Conv1d(input_size, hidden_size, kernel_size=3, stride=1, padding=1)
+        self.fc = nn.Linear(hidden_size, num_classes)
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        x = x.unsqueeze(1)  # Add channel dimension
+        # x shape: (batch_size, seq_len, input_size)
+        x = x.transpose(1, 2)  # Change to (batch_size, input_size, seq_len)
         x = self.relu(self.conv(x))
-        x = x.view(x.size(0), -1)  # Flatten
+        x = x.transpose(1, 2)  # Change back to (batch_size, seq_len, hidden_size)
         x = self.fc(x)
         x = F.log_softmax(x, dim=-1)  # Apply log_softmax
-        return x.unsqueeze(0)  # Add time dimension (1, batch_size, num_classes)
+        return x  # Shape: (batch_size, seq_len, num_classes)
+
 
 class RNNModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
@@ -88,6 +94,7 @@ class RNNModel(nn.Module):
         x = self.fc(x)
         x = F.log_softmax(x, dim=-1)  # Apply log_softmax
         return x  # Shape: (batch_size, sequence_length, num_classes)
+
 
 # === Training ===
 
@@ -103,7 +110,6 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
                              for i in range(0, len(data['train']), batch_size)]
 
         for inputs, targets in zip(batch_data_input, batch_data_target):
-
             optimizer.zero_grad()
 
             # Store original input lengths
@@ -208,13 +214,15 @@ def concatenate_adjacent_features(data, window_size):
             input_sample = sample[0]
             if input_sample.shape[0] % window_size != 0:
                 input_sample = np.vstack((input_sample, np.repeat(np.expand_dims(input_sample[-1, :], axis=0),
-                                                    (window_size - input_sample.shape[0] % window_size), axis=0)))
+                                                                  (window_size - input_sample.shape[0] % window_size),
+                                                                  axis=0)))
             list_input = [np.concatenate(input_sample[i:i + window_size, :], axis=0)
                           for i in range(0, input_sample.shape[0], window_size)]
             concatenate_input = np.vstack(list_input)
             result[set_name].append((concatenate_input, sample[1]))
             max_seq_len = max(max_seq_len, concatenate_input.shape[0])
     return result, max_seq_len
+
 
 # ====  Experiment Code ====
 

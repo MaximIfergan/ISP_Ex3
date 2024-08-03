@@ -138,9 +138,30 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             optimizer.step()
 
 
-def validate_model(model, data, batch_size, max_seq_len, criterion):
+        accuracy = validate_model(model, data, batch_size, max_seq_len, criterion)
+        print(f"accuracy: {accuracy}")
+
+    return accuracy
+
+
+def ctc_decode(log_probs, blank=0):
+    """
+    Performs CTC decoding on the log probabilities.
+    """
+    # Get the most likely class at each time step
+    best_path = torch.argmax(log_probs, dim=-1)
+
+    # Remove consecutive duplicates
+    best_path = [k for k, _ in groupby(best_path)]
+
+    # Remove blank tokens
+    best_path = [x for x in best_path if x != blank]
+
+    return best_path
+
+
+def validate_model(model, data, batch_size, max_seq_len):
     model.eval()
-    total_loss = 0
     correct = 0
     total = 0
 
@@ -151,9 +172,6 @@ def validate_model(model, data, batch_size, max_seq_len, criterion):
 
     with torch.no_grad():
         for inputs, targets in zip(batch_data_input, batch_data_target):
-            # Store original input lengths
-            input_lengths = torch.LongTensor([x.shape[0] for x in inputs])
-
             # Pad inputs to max_seq_len
             padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in inputs]
             padded_inputs = torch.stack(padded_inputs)

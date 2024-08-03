@@ -138,46 +138,6 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             optimizer.step()
 
 
-        accuracy = validate_model(model, data, batch_size, max_seq_len, criterion)
-        print(f"accuracy: {accuracy}")
-
-        # # Validation
-        # model.eval()
-        # correct = 0
-        # total = 0
-        #
-        # # with torch.no_grad():
-        # #     for inputs, targets in val_loader:
-        # #         outputs = model(inputs)
-        # #         decoded_outputs = torch.argmax(outputs, dim=-1)
-        # #         predicted_labels = [''.join([IDX_TO_CHAR[idx.item()] for idx in output if idx != 0]) for output in decoded_outputs]
-        # #         correct += sum([pred == DATA_CLASSES[targets[i][0].item()] for i, pred in enumerate(predicted_labels)])
-        # #         total += len(targets)
-        #
-        # accuracy = 100 * correct / total
-        # if accuracy > best_accuracy:
-        #     best_accuracy = accuracy
-        # print(f'Epoch {epoch + 1}/{num_epochs}, Validation Accuracy: {accuracy:.2f}%')
-
-    return accuracy
-
-
-def ctc_decode(log_probs, blank=0):
-    """
-    Performs CTC decoding on the log probabilities.
-    """
-    # Get the most likely class at each time step
-    best_path = torch.argmax(log_probs, dim=-1)
-
-    # Remove consecutive duplicates
-    best_path = [k for k, _ in groupby(best_path)]
-
-    # Remove blank tokens
-    best_path = [x for x in best_path if x != blank]
-
-    return best_path
-
-
 def validate_model(model, data, batch_size, max_seq_len, criterion):
     model.eval()
     total_loss = 0
@@ -259,15 +219,10 @@ models = [
 ]
 
 feature_windows = [1, 3, 5]  # 1 means no concatenation
-
 hidden_size = 128
-
 num_classes = len(IDX_TO_CHAR)
 num_epochs = 10
 batch_size = 8
-
-best_config = None
-best_accuracy = 0
 
 for window_size in feature_windows:
 
@@ -287,24 +242,7 @@ for window_size in feature_windows:
             print(f"\nModel: {model_name}")
             print(f"Optimizer: {optimizer_name}")
             print(f"Feature window size: {window_size}")
-            print(model)
             print(f"Optimizer parameters: {optimizer_params}")
 
             # Train and evaluate model
-            accuracy = train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
-
-            # Update best configuration if necessary
-            if accuracy > best_accuracy:
-                best_accuracy = accuracy
-                best_config = {
-                    'model': model_name,
-                    'optimizer': optimizer_name,
-                    'feature_window': window_size,
-                    'accuracy': accuracy
-                }
-
-print("\nBest configuration:")
-print(f"Model: {best_config['model']}")
-print(f"Optimizer: {best_config['optimizer']}")
-print(f"Feature window size: {best_config['feature_window']}")
-print(f"Best validation accuracy: {best_config['accuracy']:.2f}%")
+            train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)

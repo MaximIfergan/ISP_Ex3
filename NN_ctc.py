@@ -22,6 +22,8 @@ CHAR_TO_IDX = {'': 0, 'e': 1, 'f': 2, 'g': 3, 'h': 4, 'i': 5, 'n': 6, 'o': 7, 'r
                'w': 13, 'x': 14, 'z': 15}
 MAX_TARGET_SEQ_LEN = max([len(class_label) for class_label in DATA_CLASSES])
 random.seed(18)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 
 # ====  Global Function ====
@@ -102,6 +104,7 @@ class RNNModel(nn.Module):
 
 def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
     criterion = nn.CTCLoss()
+    model.to(device)
     model.train()
     for epoch in range(num_epochs):
 
@@ -122,7 +125,7 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             # Pad inputs to max_seq_len
             padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in
                              inputs]
-            padded_inputs = torch.stack(padded_inputs)
+            padded_inputs = torch.stack(padded_inputs).to(device)
 
             outputs = model(padded_inputs)  # Shape: (batch_size, max_seq_len, num_classes)
 
@@ -134,16 +137,19 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             padded_targets = [torch.nn.functional.pad(torch.LongTensor(convert_label_to_char_sequence(t)),
                                                       (0, MAX_TARGET_SEQ_LEN - len(convert_label_to_char_sequence(t))))
                               for t in targets]
-            padded_targets = torch.stack(padded_targets)
+            padded_targets = torch.stack(padded_targets).to(device)
 
             loss = criterion(outputs, padded_targets, input_lengths, target_lengths)
             loss.backward()
             optimizer.step()
 
+            if np.isnan(loss.item()):
+                return model, None
+
             total_loss += loss.item()
             batch_count += 1
 
-            if batch_count % 1 == 0:
+            if batch_count % 10 == 0:
                 print(
                     f"Epoch {epoch + 1}/{num_epochs}, Batch {batch_count}/{len(batch_data_input)}, Loss: {loss.item():.4f}")
 
@@ -207,6 +213,7 @@ def validate_model_old(model, data, batch_size, max_seq_len):
 
 
 def validate_model(model, data, batch_size, max_seq_len):
+    model.to(device)
     model.eval()
     correct = 0
     total = 0
@@ -224,7 +231,7 @@ def validate_model(model, data, batch_size, max_seq_len):
             # Pad inputs to max_seq_len
             padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in
                              inputs]
-            padded_inputs = torch.stack(padded_inputs)
+            padded_inputs = torch.stack(padded_inputs).to(device)
 
             outputs = model(padded_inputs)
             outputs = outputs.squeeze(0).transpose(0, 1)  # Shape: (max_seq_len, batch_size, num_classes)
@@ -250,6 +257,7 @@ def validate_model(model, data, batch_size, max_seq_len):
                 total += 1
 
     accuracy = correct / total
+
     return accuracy
 
 
@@ -273,7 +281,7 @@ def concatenate_adjacent_features(data, window_size):
 
 # ====  Experiment Code ====
 
-n_train, n_val, n_test = 1000, 100, 100
+n_train, n_val, n_test = -1, -1, -1
 orig_data = load_data(n_train, n_val, n_test)
 # orig_data = load_data()
 
@@ -286,6 +294,8 @@ print("(#) Test data samples: ", len(orig_data["test"]))  # Total:  1000
 optimizers = [
     ('SGD', optim.SGD, {'lr': 0.001, 'momentum': 0.9}),
     ('Adam', optim.Adam, {'lr': 0.001}),
+    ('Adam', optim.Adam, {'lr': 0.0001}),
+    ('Adam', optim.Adam, {'lr': 0.01}),
     ('AdamW', optim.AdamW, {'lr': 0.001})
 ]
 
@@ -295,54 +305,79 @@ models = [
     ('RNN', RNNModel)
 ]
 
-feature_windows = [1, 3, 5, 7]  # 1 means no concatenation
-hidden_size = 128
+feature_windows = [1, 2]  # 1 means no concatenation
+hidden_sizes = [64, 128]
 num_classes = len(IDX_TO_CHAR)
-num_epochs = 3
-batch_size = 16
+num_epochs_list = [3, 5, 7]
+batch_sizes = [4, 16, 8]
 
 best_model = None
 best_accuracy = 0
 
-for window_size in feature_windows:
+models_dict = {}
 
-    # Preprocess data with feature concatenation
-    data, max_seq_len = concatenate_adjacent_features(orig_data, window_size)
+for num_epochs in num_epochs_list:
 
-    for optimizer_name, optimizer_class, optimizer_params in optimizers:
+    for batch_size in batch_sizes:
 
-        for model_name, model_class in models:
+        for hidden_size in hidden_sizes:
 
-            # Initialize model
-            model = model_class(data["train"][0][0].shape[1], hidden_size, num_classes)
+            for window_size in feature_windows:
 
-            # Initialize optimizer and loss function
-            optimizer = optimizer_class(model.parameters(), **optimizer_params)
+                # Preprocess data with feature concatenation
+                data, max_seq_len = concatenate_adjacent_features(orig_data, window_size)
 
-            # Print model and training parameters
-            print(f"\nModel: {model_name}")
-            print(f"Optimizer: {optimizer_name}")
-            print(f"Feature window size: {window_size}")
-            print(f"Optimizer parameters: {optimizer_params}")
+                for optimizer_name, optimizer_class, optimizer_params in optimizers:
 
-            # Train and evaluate model
-            model, val_accuracy = train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
+                    for model_name, model_class in models:
 
-            if val_accuracy > best_accuracy:
-                best_accuracy = val_accuracy
-                best_model = model
-                best_config = {"window_size": window_size, "optimizer_name": optimizer_name,
-                               "optimizer_params": optimizer_params, "model_name": model_name}
+                        # Initialize model
+                        model = model_class(data["train"][0][0].shape[1], hidden_size, num_classes)
+
+                        # Initialize optimizer and loss function
+                        optimizer = optimizer_class(model.parameters(), **optimizer_params)
+
+                        # Print model and training parameters
+                        print(f"\nModel: {model_name}")
+                        print(f"Optimizer: {optimizer_name}")
+                        print(f"Feature window size: {window_size}")
+                        print(f"Optimizer parameters: {optimizer_params}")
+                        print(f"hidden_size: {hidden_size}")
+                        print(f"batch size: {batch_size}")
+                        print(f"num epochs: {num_epochs}")
+
+                        # Train and evaluate model
+                        model, val_accuracy = train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
+
+                        if val_accuracy is None:
+                            print(f"Got nan loss with: window_size: {window_size}, optimizer_name: {optimizer_name},"
+                                  f"optimizer_params: {optimizer_params}, model_name: {model_name}")
+                            continue
+
+                        config = {"window_size": window_size, "optimizer_name": optimizer_name,
+                                  "optimizer_params": optimizer_params, "model_name": model_name,
+                                  "hidden_size": hidden_size, "batch_size": batch_size, "num_epochs": num_epochs}
+
+                        if val_accuracy > best_accuracy:
+                            best_accuracy = val_accuracy
+                            best_model = model
+                            best_config = config
+                        models_dict[str(config.items())] = val_accuracy
 
 # After all experiments, print best model details and evaluate on test set
+print(sorted(models_dict.items(), key=lambda x: x[1]))
 print("\nBest Model Details:")
 print(f"Model: {best_config['model_name']}")
+print(f"hidden size: {best_config['hidden_size']}")
+print(f"batch size: {best_config['batch_size']}")
+print(f"num_epochs: {best_config['num_epochs']}")
 print(f"Optimizer: {best_config['optimizer_name']}")
 print(f"Feature window size: {best_config['window_size']}")
 print(f"Optimizer parameters: {best_config['optimizer_params']}")
 print(f"Best Validation Accuracy: {best_accuracy:.2f}%")
 
+best_model.to(device)
 data, max_seq_len = concatenate_adjacent_features(orig_data, best_config['window_size'])
-test_accuracy = validate_model(best_model, data['test'], batch_size, max_seq_len)
+test_accuracy = validate_model(best_model, data['test'], best_config['batch_size'], max_seq_len)
 
 print(f"Test Accuracy: {test_accuracy:.2f}%")

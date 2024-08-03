@@ -9,6 +9,7 @@ import numpy as np
 import torch.nn.functional as F
 import random
 import itertools
+from itertools import groupby
 
 # ====  Global Vars ====
 
@@ -161,6 +162,22 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
     return accuracy
 
 
+def ctc_decode(log_probs, blank=0):
+    """
+    Performs CTC decoding on the log probabilities.
+    """
+    # Get the most likely class at each time step
+    best_path = torch.argmax(log_probs, dim=-1)
+
+    # Remove consecutive duplicates
+    best_path = [k for k, _ in groupby(best_path)]
+
+    # Remove blank tokens
+    best_path = [x for x in best_path if x != blank]
+
+    return best_path
+
+
 def validate_model(model, data, batch_size, max_seq_len, criterion):
     model.eval()
     total_loss = 0
@@ -183,23 +200,18 @@ def validate_model(model, data, batch_size, max_seq_len, criterion):
 
             outputs = model(padded_inputs)  # Shape: (batch_size, max_seq_len, num_classes)
 
-            # Transpose outputs to (max_seq_len, batch_size, num_classes)
-            outputs = outputs.squeeze(0).transpose(0, 1)
+            # Remove the first dimension (which is 1)
+            outputs = outputs.squeeze(0)
 
-            # Convert targets to tensor and pad to MAX_TARGET_SEQ_LEN
-            target_lengths = torch.LongTensor([len(convert_label_to_char_sequence(t)) for t in targets])
-            padded_targets = [torch.nn.functional.pad(torch.LongTensor(convert_label_to_char_sequence(t)),
-                                                      (0, MAX_TARGET_SEQ_LEN - len(convert_label_to_char_sequence(t))))
-                              for t in targets]
-            padded_targets = torch.stack(padded_targets)
+            # Perform CTC decoding for each sequence in the batch
+            decoded_outputs = [ctc_decode(output) for output in outputs]
 
-            loss = criterion(outputs, padded_targets, input_lengths, target_lengths)
-            total_loss += loss.item()
+            # Convert decoded outputs to class labels
+            predicted_labels = [DATA_CLASSES[max(set(output), key=output.count)] if output else '' for output in
+                                decoded_outputs]
 
-            # Decoding
-            decoded_outputs = torch.argmax(outputs.transpose(0, 1), dim=-1)
-            predicted_labels = [''.join([IDX_TO_CHAR[idx.item()] for idx in output if idx != 0]) for output in decoded_outputs]
-            correct += sum([pred == DATA_CLASSES[targets[i]] for i, pred in enumerate(predicted_labels)])
+            # Compare predictions with targets
+            correct += sum([pred == DATA_CLASSES[target] for pred, target in zip(predicted_labels, targets)])
             total += len(targets)
 
     accuracy = 100 * correct / total

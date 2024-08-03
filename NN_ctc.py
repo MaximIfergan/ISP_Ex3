@@ -196,6 +196,50 @@ def validate_model(model, data, batch_size, max_seq_len):
     return accuracy
 
 
+def validate_model_claude(model, data, max_seq_len, batch_size):
+    model.eval()
+    correct = 0
+    total = 0
+    criterion = nn.CTCLoss()
+
+    with torch.no_grad():
+        for i in range(0, len(data), batch_size):
+            batch_data = data[i:i + batch_size]
+            inputs = [sample[0] for sample in batch_data]
+            labels = [sample[1] for sample in batch_data]
+
+            # Store original input lengths
+            input_lengths = torch.LongTensor([x.shape[0] for x in inputs])
+
+            # Pad inputs to max_seq_len
+            padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in
+                             inputs]
+            padded_inputs = torch.stack(padded_inputs)
+
+            outputs = model(padded_inputs)
+            outputs = outputs.squeeze(0).transpose(0, 1)  # Shape: (max_seq_len, batch_size, num_classes)
+
+            for j, label in enumerate(labels):
+                best_loss = float('inf')
+                best_digit = -1
+                for digit, class_name in enumerate(DATA_CLASSES):
+                    target = torch.LongTensor([CHAR_TO_IDX[char] for char in class_name]).unsqueeze(0)
+                    target_length = torch.LongTensor([len(class_name)])
+
+                    loss = criterion(outputs[:, j:j + 1, :], target, input_lengths[j:j + 1], target_length)
+
+                    if loss.item() < best_loss:
+                        best_loss = loss.item()
+                        best_digit = digit
+
+                if best_digit == label:
+                    correct += 1
+                total += 1
+
+    accuracy = correct / total
+    return accuracy
+
+
 def concatenate_adjacent_features(data, window_size):
     max_seq_len = 0
     result = {set_name: [] for set_name in DATA_SETS}

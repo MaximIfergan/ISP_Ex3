@@ -146,7 +146,7 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             if batch_count % 1 == 0:
                 print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_count}/{len(batch_data_input)}, Loss: {loss.item():.4f}")
 
-    accuracy = validate_model(model, data, batch_size, max_seq_len)
+    accuracy = validate_model(model, data["val"], batch_size, max_seq_len)
     print(f"Validation Accuracy: {accuracy}")
 
     return model, accuracy
@@ -204,7 +204,7 @@ def validate_model_old(model, data, batch_size, max_seq_len):
     return accuracy
 
 
-def validate_model(model, data, max_seq_len, batch_size):
+def validate_model(model, data, batch_size, max_seq_len):
     model.eval()
     correct = 0
     total = 0
@@ -291,10 +291,11 @@ models = [
     ('RNN', RNNModel)
 ]
 
-feature_windows = [1, 3, 5]  # 1 means no concatenation
-hidden_size = 128
+feature_windows = [1, 3]  # 1 means no concatenation
+# hidden_size = 128
+hidden_size = 64
 num_classes = len(IDX_TO_CHAR)
-num_epochs = 10
+num_epochs = 3
 batch_size = 4
 
 best_model = None
@@ -338,5 +339,5 @@ print(f"Feature window size: {best_config['window_size']}")
 print(f"Optimizer parameters: {best_config['optimizer_params']}")
 print(f"Best Validation Accuracy: {best_accuracy:.2f}%")
 
-test_accuracy = validate_model(best_model, data['test'], max_seq_len, batch_size)
+test_accuracy = validate_model(best_model, data['test'], batch_size, max_seq_len)
 print(f"Test Accuracy: {test_accuracy:.2f}%")

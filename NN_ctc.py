@@ -116,8 +116,8 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
 
             outputs = model(padded_inputs)  # Shape: (batch_size, max_seq_len, num_classes)
 
-            # Transpose outputs to (max_seq_len, batch_size, num_classes)
-            outputs = outputs.transpose(0, 1)
+            # Reshape outputs to (max_seq_len, batch_size, num_classes)
+            outputs = outputs.squeeze(0).transpose(0, 1)
 
             # Convert targets to tensor and pad to MAX_TARGET_SEQ_LEN
             target_lengths = torch.LongTensor([len(convert_label_to_char_sequence(t)) for t in targets])

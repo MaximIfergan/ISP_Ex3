@@ -105,6 +105,9 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
     model.train()
     for epoch in range(num_epochs):
 
+        total_loss = 0
+        batch_count = 0
+
         batch_data_input = [[sample[0] for sample in data['train'][i:i + batch_size]]
                             for i in range(0, len(data['train']), batch_size)]
         batch_data_target = [[sample[1] for sample in data['train'][i:i + batch_size]]
@@ -137,11 +140,16 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             loss.backward()
             optimizer.step()
 
+            total_loss += loss.item()
+            batch_count += 1
 
-        accuracy = validate_model(model, data, batch_size, max_seq_len, criterion)
-        print(f"accuracy: {accuracy}")
+            if batch_count % 1 == 0:
+                print(f"Epoch {epoch+1}/{num_epochs}, Batch {batch_count}/{len(batch_data_input)}, Loss: {loss.item():.4f}")
 
-    return accuracy
+    accuracy = validate_model(model, data, batch_size, max_seq_len)
+    print(f"Validation Accuracy: {accuracy}")
+
+    return model, accuracy
 
 
 def ctc_decode(log_probs, blank=0):
@@ -160,7 +168,7 @@ def ctc_decode(log_probs, blank=0):
     return best_path
 
 
-def validate_model(model, data, batch_size, max_seq_len):
+def validate_model_old(model, data, batch_size, max_seq_len):
     model.eval()
     correct = 0
     total = 0
@@ -196,7 +204,7 @@ def validate_model(model, data, batch_size, max_seq_len):
     return accuracy
 
 
-def validate_model_claude(model, data, max_seq_len, batch_size):
+def validate_model(model, data, max_seq_len, batch_size):
     model.eval()
     correct = 0
     total = 0
@@ -263,7 +271,7 @@ def concatenate_adjacent_features(data, window_size):
 
 # ====  Experiment Code ====
 
-n_train, n_val, n_test = 10, 10, 10
+n_train, n_val, n_test = 8, 8, 8
 data = load_data(n_train, n_val, n_test)
 
 print("(#) Train data samples: ", len(data["train"]))
@@ -287,7 +295,10 @@ feature_windows = [1, 3, 5]  # 1 means no concatenation
 hidden_size = 128
 num_classes = len(IDX_TO_CHAR)
 num_epochs = 10
-batch_size = 8
+batch_size = 4
+
+best_model = None
+best_accuracy = 0
 
 for window_size in feature_windows:
 
@@ -310,4 +321,22 @@ for window_size in feature_windows:
             print(f"Optimizer parameters: {optimizer_params}")
 
             # Train and evaluate model
-            train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
+            model, val_accuracy = train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
+
+            if val_accuracy > best_accuracy:
+                best_accuracy = val_accuracy
+                best_model = model
+                best_config = {"window_size" : window_size, "optimizer_name": optimizer_name,
+                                      "optimizer_params": optimizer_params, "model_name": model_name}
+
+
+# After all experiments, print best model details and evaluate on test set
+print("\nBest Model Details:")
+print(f"Model: {best_config['model_name']}")
+print(f"Optimizer: {best_config['optimizer_name']}")
+print(f"Feature window size: {best_config['window_size']}")
+print(f"Optimizer parameters: {best_config['optimizer_params']}")
+print(f"Best Validation Accuracy: {best_accuracy:.2f}%")
+
+test_accuracy = validate_model(best_model, data['test'], max_seq_len, batch_size)
+print(f"Test Accuracy: {test_accuracy:.2f}%")

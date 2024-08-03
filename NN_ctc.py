@@ -17,6 +17,7 @@ DATA_CLASSES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', '
 DATA_SETS = ['train', 'val', 'test']
 IDX_TO_CHAR = {0: '', 1: 'e', 2: 'f', 3: 'g', 4: 'h', 5: 'i', 6: 'n', 7: 'o', 8: 'r', 9: 's', 10: 't', 11: 'u', 12: 'v', 13: 'w', 14: 'x', 15: 'z'}
 CHAR_TO_IDX = {'': 0, 'e': 1, 'f': 2, 'g': 3, 'h': 4, 'i': 5, 'n': 6, 'o': 7, 'r': 8, 's': 9, 't': 10, 'u': 11, 'v': 12, 'w': 13, 'x': 14, 'z': 15}
+MAX_TARGET_SEQ_LEN = max([len(class_label) for class_label in DATA_CLASSES])
 random.seed(18)
 
 # ====  Global Function ====
@@ -90,47 +91,68 @@ class RNNModel(nn.Module):
 
 # === Training ===
 
-def train_model(model, data, optimizer, num_epochs, batch_size):
+def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
     best_accuracy = 0
     criterion = nn.CTCLoss()
+    model.train()
     for epoch in range(num_epochs):
-        model.train()
-        batch_data_input = [data['train'][i:i + batch_size][0]
+
+        batch_data_input = [[sample[0] for sample in data['train'][i:i + batch_size]]
                             for i in range(0, len(data['train']), batch_size)]
-        batch_data_target = [data['train'][i:i + batch_size][1]
+        batch_data_target = [[sample[1] for sample in data['train'][i:i + batch_size]]
                              for i in range(0, len(data['train']), batch_size)]
-        for batch in batch_data:
+
+        for inputs, targets in zip(batch_data_input, batch_data_target):
+
             optimizer.zero_grad()
-            for inputs, targets in batch:
-                outputs = model(inputs)
-                output_lengths = torch.full(size=(outputs.shape[1],), fill_value=outputs.shape[0], dtype=torch.long)
-                target_lengths = torch.LongTensor([len(t) for t in targets])
-                targets = torch.cat(targets)
-                loss = criterion(outputs, targets, output_lengths, target_lengths)
+
+            # Store original input lengths
+            input_lengths = torch.LongTensor([x.shape[0] for x in inputs])
+
+            # Pad inputs to max_seq_len
+            padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in
+                             inputs]
+            padded_inputs = torch.stack(padded_inputs)
+
+            outputs = model(padded_inputs)  # Shape: (batch_size, max_seq_len, num_classes)
+
+            # Transpose outputs to (max_seq_len, batch_size, num_classes)
+            outputs = outputs.transpose(0, 1)
+
+            # Convert targets to tensor and pad to MAX_TARGET_SEQ_LEN
+            target_lengths = torch.LongTensor([len(convert_label_to_char_sequence(t)) for t in targets])
+            padded_targets = [torch.nn.functional.pad(torch.LongTensor(convert_label_to_char_sequence(t)),
+                                                      (0, MAX_TARGET_SEQ_LEN - len(convert_label_to_char_sequence(t))))
+                              for t in targets]
+            padded_targets = torch.stack(padded_targets)
+
+            loss = criterion(outputs, padded_targets, input_lengths, target_lengths)
             loss.backward()
             optimizer.step()
 
-        # Validation
-        model.eval()
-        correct = 0
-        total = 0
-        with torch.no_grad():
-            for inputs, targets in val_loader:
-                outputs = model(inputs)
-                decoded_outputs = torch.argmax(outputs, dim=-1)
-                predicted_labels = [''.join([IDX_TO_CHAR[idx.item()] for idx in output if idx != 0]) for output in decoded_outputs]
-                correct += sum([pred == DATA_CLASSES[targets[i][0].item()] for i, pred in enumerate(predicted_labels)])
-                total += len(targets)
-
-        accuracy = 100 * correct / total
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
-        print(f'Epoch {epoch + 1}/{num_epochs}, Validation Accuracy: {accuracy:.2f}%')
+        # # Validation
+        # model.eval()
+        # correct = 0
+        # total = 0
+        #
+        # # with torch.no_grad():
+        # #     for inputs, targets in val_loader:
+        # #         outputs = model(inputs)
+        # #         decoded_outputs = torch.argmax(outputs, dim=-1)
+        # #         predicted_labels = [''.join([IDX_TO_CHAR[idx.item()] for idx in output if idx != 0]) for output in decoded_outputs]
+        # #         correct += sum([pred == DATA_CLASSES[targets[i][0].item()] for i, pred in enumerate(predicted_labels)])
+        # #         total += len(targets)
+        #
+        # accuracy = 100 * correct / total
+        # if accuracy > best_accuracy:
+        #     best_accuracy = accuracy
+        # print(f'Epoch {epoch + 1}/{num_epochs}, Validation Accuracy: {accuracy:.2f}%')
 
     return best_accuracy
 
 
 def concatenate_adjacent_features(data, window_size):
+    max_seq_len = 0
     result = {set_name: [] for set_name in DATA_SETS}
     for set_name in DATA_SETS:
         for sample in data[set_name]:
@@ -142,7 +164,8 @@ def concatenate_adjacent_features(data, window_size):
                           for i in range(0, input_sample.shape[0], window_size)]
             concatenate_input = np.vstack(list_input)
             result[set_name].append((concatenate_input, sample[1]))
-    return result
+            max_seq_len = max(max_seq_len, concatenate_input.shape[0])
+    return result, max_seq_len
 
 # ====  Experiment Code ====
 
@@ -177,12 +200,13 @@ batch_size = 32
 best_config = None
 best_accuracy = 0
 
-for optimizer_name, optimizer_class, optimizer_params in optimizers:
-    for model_name, model_class in models:
-        for window_size in feature_windows:
+for window_size in feature_windows:
 
-            # Preprocess data with feature concatenation
-            data = concatenate_adjacent_features(data, window_size)
+    # Preprocess data with feature concatenation
+    data, max_seq_len = concatenate_adjacent_features(data, window_size)
+
+    for optimizer_name, optimizer_class, optimizer_params in optimizers:
+        for model_name, model_class in models:
 
             # Initialize model
             model = model_class(data["train"][0][0].shape[1], hidden_size, num_classes)
@@ -198,7 +222,7 @@ for optimizer_name, optimizer_class, optimizer_params in optimizers:
             print(f"Optimizer parameters: {optimizer_params}")
 
             # Train and evaluate model
-            accuracy = train_model(model, data, optimizer, num_epochs, batch_size)
+            accuracy = train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
 
             # Update best configuration if necessary
             if accuracy > best_accuracy:

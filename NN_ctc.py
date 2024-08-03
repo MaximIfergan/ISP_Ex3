@@ -101,7 +101,6 @@ class RNNModel(nn.Module):
 # === Training ===
 
 def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
-    best_accuracy = 0
     criterion = nn.CTCLoss()
     model.train()
     for epoch in range(num_epochs):
@@ -274,16 +273,18 @@ def concatenate_adjacent_features(data, window_size):
 
 # ====  Experiment Code ====
 
-n_train, n_val, n_test = 100, 20, 20
+n_train, n_val, n_test = 1000, 100, 100
 orig_data = load_data(n_train, n_val, n_test)
+# orig_data = load_data()
 
-print("(#) Train data samples: ", len(orig_data["train"]))
-print("(#) Validation data samples: ", len(orig_data["val"]))
-print("(#) Test data samples: ", len(orig_data["test"]))
+print("(#) Train data samples: ", len(orig_data["train"]))  # Total:  12798
+print("(#) Validation data samples: ", len(orig_data["val"]))  # Total:  1000
+print("(#) Test data samples: ", len(orig_data["test"]))  # Total:  1000
+
 
 # Define hyperparameters and options
 optimizers = [
-    ('SGD', optim.SGD, {'lr': 0.01, 'momentum': 0.9}),
+    ('SGD', optim.SGD, {'lr': 0.001, 'momentum': 0.9}),
     ('Adam', optim.Adam, {'lr': 0.001}),
     ('AdamW', optim.AdamW, {'lr': 0.001})
 ]
@@ -294,12 +295,11 @@ models = [
     ('RNN', RNNModel)
 ]
 
-feature_windows = [1, 3]  # 1 means no concatenation
-# hidden_size = 128
-hidden_size = 64
+feature_windows = [1, 3, 5, 7]  # 1 means no concatenation
+hidden_size = 128
 num_classes = len(IDX_TO_CHAR)
 num_epochs = 3
-batch_size = 4
+batch_size = 16
 
 best_model = None
 best_accuracy = 0
@@ -310,6 +310,7 @@ for window_size in feature_windows:
     data, max_seq_len = concatenate_adjacent_features(orig_data, window_size)
 
     for optimizer_name, optimizer_class, optimizer_params in optimizers:
+
         for model_name, model_class in models:
 
             # Initialize model

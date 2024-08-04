@@ -10,6 +10,8 @@ import torch.nn.functional as F
 import random
 import itertools
 from itertools import groupby
+import matplotlib.pyplot as plt
+import json
 
 # ====  Global Vars ====
 
@@ -23,7 +25,7 @@ CHAR_TO_IDX = {'': 0, 'e': 1, 'f': 2, 'g': 3, 'h': 4, 'i': 5, 'n': 6, 'o': 7, 'r
 MAX_TARGET_SEQ_LEN = max([len(class_label) for class_label in DATA_CLASSES])
 random.seed(18)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
+print("Training Device:", device)
 
 
 # ====  Global Function ====
@@ -149,7 +151,7 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
             total_loss += loss.item()
             batch_count += 1
 
-            if batch_count % 10 == 0:
+            if batch_count % 100 == 0:
                 print(
                     f"Epoch {epoch + 1}/{num_epochs}, Batch {batch_count}/{len(batch_data_input)}, Loss: {loss.item():.4f}")
 
@@ -157,59 +159,6 @@ def train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len):
     print(f"Validation Accuracy: {accuracy}")
 
     return model, accuracy
-
-
-def ctc_decode(log_probs, blank=0):
-    """
-    Performs CTC decoding on the log probabilities.
-    """
-    # Get the most likely class at each time step
-    best_path = torch.argmax(log_probs, dim=-1)
-
-    # Remove consecutive duplicates
-    best_path = [k for k, _ in groupby(best_path)]
-
-    # Remove blank tokens
-    best_path = [x for x in best_path if x != blank]
-
-    return best_path
-
-
-def validate_model_old(model, data, batch_size, max_seq_len):
-    model.eval()
-    correct = 0
-    total = 0
-
-    batch_data_input = [[sample[0] for sample in data['val'][i:i + batch_size]]
-                        for i in range(0, len(data['val']), batch_size)]
-    batch_data_target = [[sample[1] for sample in data['val'][i:i + batch_size]]
-                         for i in range(0, len(data['val']), batch_size)]
-
-    with torch.no_grad():
-        for inputs, targets in zip(batch_data_input, batch_data_target):
-            # Pad inputs to max_seq_len
-            padded_inputs = [torch.nn.functional.pad(torch.FloatTensor(x), (0, 0, 0, max_seq_len - x.shape[0])) for x in
-                             inputs]
-            padded_inputs = torch.stack(padded_inputs)
-
-            outputs = model(padded_inputs)  # Shape: (batch_size, max_seq_len, num_classes)
-
-            # Remove the first dimension (which is 1)
-            outputs = outputs.squeeze(0)
-
-            # Perform CTC decoding for each sequence in the batch
-            decoded_outputs = [ctc_decode(output) for output in outputs]
-
-            # Convert decoded outputs to class labels
-            predicted_labels = [DATA_CLASSES[max(set(output), key=output.count)] if output else '' for output in
-                                decoded_outputs]
-
-            # Compare predictions with targets
-            correct += sum([pred == DATA_CLASSES[target] for pred, target in zip(predicted_labels, targets)])
-            total += len(targets)
-
-    accuracy = 100 * correct / total
-    return accuracy
 
 
 def validate_model(model, data, batch_size, max_seq_len):
@@ -276,12 +225,13 @@ def concatenate_adjacent_features(data, window_size):
             concatenate_input = np.vstack(list_input)
             result[set_name].append((concatenate_input, sample[1]))
             max_seq_len = max(max_seq_len, concatenate_input.shape[0])
+
     return result, max_seq_len
 
 
 # ====  Experiment Code ====
 
-n_train, n_val, n_test = -1, -1, -1
+n_train, n_val, n_test = 20, 20, 20
 orig_data = load_data(n_train, n_val, n_test)
 # orig_data = load_data()
 
@@ -294,8 +244,8 @@ print("(#) Test data samples: ", len(orig_data["test"]))  # Total:  1000
 optimizers = [
     ('SGD', optim.SGD, {'lr': 0.001, 'momentum': 0.9}),
     ('Adam', optim.Adam, {'lr': 0.001}),
-    ('Adam', optim.Adam, {'lr': 0.0001}),
-    ('Adam', optim.Adam, {'lr': 0.01}),
+    # ('Adam', optim.Adam, {'lr': 0.0001}),
+    # ('Adam', optim.Adam, {'lr': 0.01}),
     ('AdamW', optim.AdamW, {'lr': 0.001})
 ]
 
@@ -305,72 +255,67 @@ models = [
     ('RNN', RNNModel)
 ]
 
-feature_windows = [1, 2]  # 1 means no concatenation
-hidden_sizes = [64, 128]
+feature_windows = [1, 2, 3, 4]  # 1 means no concatenation
+hidden_sizes = [64, 128, 256]
 num_classes = len(IDX_TO_CHAR)
-num_epochs_list = [3, 5, 7]
-batch_sizes = [4, 16, 8]
+batch_sizes = [8, 16, 32]
+num_epochs = 3
 
 best_model = None
 best_accuracy = 0
+results = []
 
-models_dict = {}
+for batch_size in batch_sizes:
 
-for num_epochs in num_epochs_list:
+    for hidden_size in hidden_sizes:
 
-    for batch_size in batch_sizes:
+        for window_size in feature_windows:
 
-        for hidden_size in hidden_sizes:
+            # Preprocess data with feature concatenation
+            data, max_seq_len = concatenate_adjacent_features(orig_data, window_size)
 
-            for window_size in feature_windows:
+            for optimizer_name, optimizer_class, optimizer_params in optimizers:
 
-                # Preprocess data with feature concatenation
-                data, max_seq_len = concatenate_adjacent_features(orig_data, window_size)
+                for model_name, model_class in models:
 
-                for optimizer_name, optimizer_class, optimizer_params in optimizers:
+                    # Initialize model
+                    model = model_class(data["train"][0][0].shape[1], hidden_size, num_classes)
 
-                    for model_name, model_class in models:
+                    # Initialize optimizer and loss function
+                    optimizer = optimizer_class(model.parameters(), **optimizer_params)
 
-                        # Initialize model
-                        model = model_class(data["train"][0][0].shape[1], hidden_size, num_classes)
+                    # Print model and training parameters
+                    print(f"\nModel: {model_name}")
+                    print(f"Optimizer: {optimizer_name}")
+                    print(f"Feature window size: {window_size}")
+                    print(f"Optimizer parameters: {optimizer_params}")
+                    print(f"hidden_size: {hidden_size}")
+                    print(f"batch size: {batch_size}")
 
-                        # Initialize optimizer and loss function
-                        optimizer = optimizer_class(model.parameters(), **optimizer_params)
+                    # Train and evaluate model
+                    model, val_accuracy = train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
 
-                        # Print model and training parameters
-                        print(f"\nModel: {model_name}")
-                        print(f"Optimizer: {optimizer_name}")
-                        print(f"Feature window size: {window_size}")
-                        print(f"Optimizer parameters: {optimizer_params}")
-                        print(f"hidden_size: {hidden_size}")
-                        print(f"batch size: {batch_size}")
-                        print(f"num epochs: {num_epochs}")
+                    config = {"window_size": window_size, "optimizer_name": optimizer_name,
+                              "optimizer_params": optimizer_params, "model_name": model_name,
+                              "hidden_size": hidden_size, "batch_size": batch_size, "val_accuracy": val_accuracy}
 
-                        # Train and evaluate model
-                        model, val_accuracy = train_model(model, data, optimizer, num_epochs, batch_size, max_seq_len)
+                    if val_accuracy is None:
+                        print(f"Got nan loss with: window_size: {window_size}, optimizer_name: {optimizer_name},"
+                              f"optimizer_params: {optimizer_params}, model_name: {model_name}")
+                        continue
 
-                        if val_accuracy is None:
-                            print(f"Got nan loss with: window_size: {window_size}, optimizer_name: {optimizer_name},"
-                                  f"optimizer_params: {optimizer_params}, model_name: {model_name}")
-                            continue
+                    if val_accuracy > best_accuracy:
+                        best_accuracy = val_accuracy
+                        best_model = model
+                        best_config = config
 
-                        config = {"window_size": window_size, "optimizer_name": optimizer_name,
-                                  "optimizer_params": optimizer_params, "model_name": model_name,
-                                  "hidden_size": hidden_size, "batch_size": batch_size, "num_epochs": num_epochs}
-
-                        if val_accuracy > best_accuracy:
-                            best_accuracy = val_accuracy
-                            best_model = model
-                            best_config = config
-                        models_dict[str(config.items())] = val_accuracy
+                    results.append(config)
 
 # After all experiments, print best model details and evaluate on test set
-print(sorted(models_dict.items(), key=lambda x: x[1]))
 print("\nBest Model Details:")
 print(f"Model: {best_config['model_name']}")
 print(f"hidden size: {best_config['hidden_size']}")
 print(f"batch size: {best_config['batch_size']}")
-print(f"num_epochs: {best_config['num_epochs']}")
 print(f"Optimizer: {best_config['optimizer_name']}")
 print(f"Feature window size: {best_config['window_size']}")
 print(f"Optimizer parameters: {best_config['optimizer_params']}")
@@ -381,3 +326,29 @@ data, max_seq_len = concatenate_adjacent_features(orig_data, best_config['window
 test_accuracy = validate_model(best_model, data['test'], best_config['batch_size'], max_seq_len)
 
 print(f"Test Accuracy: {test_accuracy:.2f}%")
+
+with open('experiment_results.json', 'w') as f:
+    json.dump(results, f, indent=4)
+
+def plot_averages(param_name, possible_values):
+    averages = []
+    for value in possible_values:
+        relevant_results = [r["val_accuracy"] for r in results if r[param_name] == value]
+        avg = np.mean(relevant_results)
+        averages.append(avg)
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(possible_values, averages)
+    plt.title(f"Average Validation Accuracy by {param_name}")
+    plt.xlabel(param_name)
+    plt.ylabel("Average Validation Accuracy")
+    filename = f"{param_name}_accuracy.png"
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.close()  # Close the figure to free up memory
+
+# Plot for each hyperparameter
+plot_averages("optimizer_name", ["SGD", "Adam", "AdamW"])
+plot_averages("batch_size", batch_sizes)
+plot_averages("model_name", ["Linear", "Conv", "RNN"])
+plot_averages("window_size", feature_windows)
+plot_averages("hidden_size", hidden_sizes)

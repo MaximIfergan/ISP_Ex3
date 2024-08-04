@@ -10,5 +10,5 @@
 #SBATCH --mail-user=maxim.ifergan@mail.huji.ac.il
 #SBATCH --gres=gpu:1,vmem:10g
 
-source /cs/labs/oabend/maximifergan/TheFutureOfThePast/venv/bin/activate.csh
-/cs/labs/oabend/maximifergan/TheFutureOfThePast/venv/bin/python /cs/labs/oabend/maximifergan/TheFutureOfThePast/main.py
+source /cs/labs/oabend/maximifergan/ISP_Ex3/venv/bin/activate.csh
+/cs/labs/oabend/maximifergan/ISP_Ex3/venv/bin/python /cs/labs/oabend/maximifergan/ISP_Ex3/NN_ctc.py
